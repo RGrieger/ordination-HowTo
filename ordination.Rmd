@@ -1,0 +1,255 @@
+---
+title: "NMDS Ordination"
+subtitle: "A tutorial for vegetation community multivariate analysis with the vegan package"
+author: "Rebekah Grieger"
+date: "30 September 2019"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "centre")
+library(vegan)
+library(ggplot2)
+```
+
+# Before you begin
+1. Save data as csv files (these are easy for R to work with)
+2. Set working directory: this is the folder that R will look in when searching for files (Session, Set working directory, Choose directory...  OR  Control+Shift+H for windows Command+Shift+H for mac)
+3. Install or load required packages: if you get an error  `Error in library(vegan) : there is no package called ‘vegan’` it is because the package is not installed. Use `install.packages("vegan")` and then run `library(vegan)` again.
+
+```{r packages, echo = TRUE}
+library(vegan) # for vegetation and community analysis
+library(dplyr) # for data manipulation
+```
+
+It is ok to see these warnings! R is just telling you that it has read the packages correctly but they were built in different versions of R than the one you are currently using, it will not effect the function of the package!
+
+# Import and transform data
+
+**The data used for this example is part of the vegan package and does not need to be imported or transformed**
+
+Before you can do any sort of ordination analysis you will need to 
+1. Import data from csv file
+2. Transform your data from long format (multiple lines for each site) into wide format (single row for each site, species as columns)
+
+``` {r import data, echo = TRUE, eval = FALSE}
+dune <- read.csv(file = "dune.csv", header = TRUE, row.names = 1) # header = TRUE for data with column names, row.names = 1 for data where the site name is in the first column
+dune.env <- read.csv(file = "dune_env.csv", header = T, row.names = 1)
+```
+```{r, echo = TRUE, eval = TRUE}
+#alternatively for this example you can import using
+data("dune")
+data("dune.env")
+```
+
+The data used in this example doesn't need transformation as it is already in wide format but this is how you can do it.
+
+After reading in the raw data, there is many rows with data for the same species but from different samples or sites, thsi needs to be transformed it into wide format. To do that you need to create a matrix that is as long as the number of samples and as wide as the number of species observed.
+
+``` {r transformation, echo = TRUE, eval = FALSE}
+taxa <- unique(data$Species) #creates list of each unique species
+samples <- sort(unique(data$Sample.ID)) #creates list of each unique site or sample
+
+#make empty matrix "data1" ready to fill in
+data1 <- matrix(nrow = length(samples), ncol = length(taxa), dimnames = list(samples,taxa))
+
+for(r in 1:nrow(LL.data)){
+  samp <- LL.data[r, 1]
+  tax <- LL.data[r, 2]
+  data1[samp,tax] <- LL.data[r, 3]
+} # 1, 2, 3 here relate the the column number in the raw data in which the sample name, species name and data are in
+
+data1[is.na(data1)] <- 0   #convert NA's to 0
+
+```
+Now we have a dataset that is in wide format where each sample is its own row and each species is its own column but we need to save it as a data frame to do anyfurther analysis.
+
+```{r data frame, echo = TRUE, eval = FALSE}
+data <- as.data.frame(data1)
+```
+
+# Ordinaton
+Now that the data is in a format that is suitable for ordination methods you can use the `metaMDS` function from the vegan package to run the NMDS and `envfit` to identify species or environmental variables which are driving the pattern. 
+
+```{r ordination, echo = TRUE}
+dune.mds <- metaMDS(dune, distance = "bray", autotransform = FALSE)
+dune.mds # make note of the stress value, this shows how easy it was to condense multidimensional data into two dimensional space, below 0.2 is generally good
+```
+
+#Ploting ordinations
+
+You can use base R plotting functions to graph ordinations which are fine and fairly maniplative but you can also ggplotting functions which are a bit more fancy and more manipulative. Here there is code to do it either way
+
+##Using base R plotting
+
+```{r base plot, echo = TRUE, eval = TRUE}
+plot(dune.mds) # displays sites and species
+plot(dune.mds, type = "n") #displays empty ordination space
+points(dune.mds, display = "sites", pch = c(16, 8, 17, 18) [as.numeric(dune.env$Management)], col = c("green", "blue", "orange", "black") [as.numeric(dune.env$Management)]) # displays site points where symbols (pch) and colour (col) are different management options
+legend("topright", legend = levels(dune.env$Management), pch = c(16, 8, 17, 18), col = c("green", "blue", "orange", "black"), bty = "n", cex = 1) # displays symbol and colour legend
+legend("topleft", "stress = 0.118", bty = "n", cex = 1) # displays legend text of stress value 
+
+```
+
+You can also add ellipses or hulls.
+Ordiplot is an alternative to the basic plot function but will do the same thing in this case.
+
+```{r ellipses, echo = T, eval = T}
+ordiplot(dune.mds, type = "n", main = "ellipses")
+orditorp(dune.mds, display = "sites", labels = F, pch = c(16, 8, 17, 18) [as.numeric(dune.env$Management)], col = c("green", "blue", "orange", "black") [as.numeric(dune.env$Management)], cex = 1)
+ordiellipse(dune.mds, groups = dune.env$Management, draw = "polygon", lty = 1, col = "grey90")
+```
+```{r hulls, echo = T, eval = T}
+ordiplot(dune.mds, type = "n", main = "hulls")
+orditorp(dune.mds, display = "sites", labels = F, pch = c(16, 8, 17, 18) [as.numeric(dune.env$Management)], col = c("green", "blue", "orange", "black") [as.numeric(dune.env$Management)], cex = 1)
+ordihull(dune.mds, groups = dune.env$Management, draw = "polygon", lty = 1, col = "grey90")
+```
+
+You can also investigate the species which may be driving the site distribution pattern, referred to as intrinsic variables.
+
+```{r intrinsics, echo = T, eval = T}
+intrinsics <- envfit(dune.mds, dune, permutations = 999)
+head(intrinsics)
+ordiplot(dune.mds, type = "n", main = "intrinsic species")
+orditorp(dune.mds, display = "sites", labels = F, pch = c(16, 8, 17, 18) [as.numeric(dune.env$Management)], col = c("green", "blue", "orange", "black") [as.numeric(dune.env$Management)], cex = 1)
+plot(intrinsics, p.max = 0.01, col = "black", cex = 0.7) # change the significance level of species shown with p.max
+```
+
+Environmental variables can also be used with `envfit` which are referred to as extrinsic variables. This works best with continuous variables of which there is only one (A1) in this dataset.If you only want to fit vector variables (continuous variables) use `vectorfit` and if you only want to fit factor variables (categorical variables) use `factorfit`.
+
+```{r extrinsics, echo = T, eval = T}
+extrinsics <- envfit(dune.mds, dune.env, permutations = 999)
+head(extrinsics)
+ordiplot(dune.mds, type = "n", main = "extrinsic variables")
+orditorp(dune.mds, display = "sites", labels = F, pch = c(16, 8, 17, 18) [as.numeric(dune.env$Management)], col = c("green", "blue", "orange", "black") [as.numeric(dune.env$Management)], cex = 1)
+plot(extrinsics, col = "black", cex = 0.7)
+```
+
+For some more options and info on base R ordination plotting see this tutorial from Jon Lefcheck <https://jonlefcheck.net/2012/10/24/nmds-tutorial-in-r/> or some more examples and community ecology analysis tips by David Zelený <https://www.davidzeleny.net/anadat-r/doku.php/en:ordiagrams_examples>
+
+## Plotting Using ggplot2
+
+The following example has been taken from Olivia Burge and uses the same Dune dataset as above <https://oliviarata.wordpress.com/2014/04/17/ordinations-in-ggplot2/>
+
+For this example you need the ggplot2 and grid packages
+
+```{r packages2, echo = T}
+library(ggplot2) # for pretty plots
+library(grid) # for envfit arrows on ordination plot
+```
+
+Import data
+```{r import, echo = T}
+data("dune")
+data("dune.env")
+```
+
+The mds and envfit functions are run using the same method above
+```{r mds, echo = T, eval = T}
+meta.mds.dune <- metaMDS(dune, distance = "bray", autotransform = F)
+dune.envfit <- envfit(meta.mds.dune, dune.env, permutations = 999)
+```
+
+To plot the output from the mds a new datasheet needs to be created which contains the x,y points for each site
+```{r points, echo = T}
+dune.nmds.data <- dune.env
+dune.nmds.data$NMDS1 <- meta.mds.dune$points[ ,1]
+dune.nmds.data$NMDS2 <- meta.mds.dune$points[ ,2]
+```
+
+A new dataset containing species data also needs to be made. This is not necessary if you don't want to show the species on the final graph. Alternatively you can calculate intrinsic variables as above and plot them using code similar to the environmental extrinsics below
+```{r species, echo = T}
+sp.abund<-colSums(dune) #total abundances for each species
+spps <- data.frame(scores(meta.mds.dune, display = "species")) #dataframe of species scoes for plotting
+spps$species <- row.names(spps) # making a column with species names
+spps$colsums <- sp.abund #adding the colSums from above
+spps<-spps[!is.na(spps$NMDS1) & !is.na(spps$NMDS2),] #removes NAs
+spps.colmedian <- median(spps$colsums) #create an object that is the median of the abundance of the measured species
+spps.colmean <- mean(spps$colsums) #creates a mean instead if you wish to use
+
+spps2 <- subset(spps,spps$colsums > spps.colmean) #select the most abundant species. Could discard fewer by going something like - spps$colsums>(spps.colmedian/2) instead
+spps2$species <- factor(spps2$species) #otherwise factor doesn't drop unused levels and it will throw an error
+
+```
+
+To show environmental extrinsic variables another datasheet needs to be created
+```{r env, echo = T}
+env.scores.dune <- as.data.frame(scores(dune.envfit, display = "vectors")) #extracts relevant scores from envifit
+env.scores.dune <- cbind(env.scores.dune, env.variables = rownames(env.scores.dune)) #and then gives them their names
+```
+
+Now we have the relevant information for plotting the ordination in ggplot! Lets get plotting!
+
+```{r ggplot}
+mult <- 2 #multiplier for the arrows and text for envfit below. You can change this and then rerun the plot command.
+dune.nmds.gg1 <- ggplot(data = dune.nmds.data, aes(y = NMDS2, x = NMDS1))+ #sets up the plot. 
+   geom_point(aes(shape = Management, col = Management), size = 3 ) + #puts the site points in from the ordination, shape determined by site, size refers to size of point
+    geom_segment(data = env.scores.dune,
+                    aes(x = 0, xend = mult*NMDS1, y = 0, yend = mult*NMDS2),
+                    arrow = arrow(length = unit(0.25, "cm")), colour = "blue") + #arrows for envfit.  doubled the length for similarity to the plot() function. NB check ?envfit regarding arrow length if not familiar with lengths
+       geom_text(data = env.scores.dune, #labels the environmental variable arrows * "mult" as for the arrows
+                 aes(x = mult*NMDS1, y = mult*NMDS2, label=env.variables),size = 5, hjust = -0.5)+
+   scale_shape_manual(values = c(16, 8, 17, 18))+ #sets the shape of the plot points instead of using whatever ggplot2 automatically provides
+    scale_color_manual(values = c("green", "blue", "orange", "black"))+
+    coord_cartesian(xlim = c(-1,1.5))+  ## NB this changes the visible area of the plot only (this is a good thing, apparently). Can also specify ylim. Here in case you want to set xaxis manually.
+   theme_classic()+ # plain graph type with no grid lines and white background
+  theme(panel.background = element_rect(fill = NA, 
+        colour = "black", linetype = "solid"), # adds border around plot area
+    legend.key = element_rect(fill = NA, linetype = "blank")) # removes box and shading around legend symbols
+
+dune.nmds.gg1 #displays plot output
+
+```
+
+The thing with ggplot is that you can add many layers onto the same plot using different `geom_` options as well as manipulating every graphical feature and graph space.
+Here are some other options which could be added to the ordination plot.
+
+**Ellipses**
+
+```{r options, echo = T, eval = T}
+
+# function for ellipsess 
+#taken from the excellent stackoverflow Q+A: http://stackoverflow.com/questions/13794419/plotting-ordiellipse-function-from-vegan-package-onto-nmds-plot-created-in-ggplo
+veganCovEllipse <- function (cov, center = c(0, 0), scale = 1, npoints = 100) 
+{
+  theta <- (0:npoints) * 2 * pi/npoints
+  Circle <- cbind(cos(theta), sin(theta))
+  t(center + scale * t(Circle %*% chol(cov)))
+}
+ 
+#data for ellipse, in this case using the management factor
+df_ell.dune.management <- data.frame() #sets up a data frame before running the function.
+for(g in levels(dune.nmds.data$Management)){
+  df_ell.dune.management <- rbind(df_ell.dune.management, cbind(as.data.frame(with(dune.nmds.data [dune.nmds.data$Management==g,],
+                                                         veganCovEllipse(cov.wt(cbind(NMDS1,NMDS2),wt=rep(1/length(NMDS1),length(NMDS1)))$cov,center=c(mean(NMDS1),mean(NMDS2))))) ,Management=g))
+}
+ 
+# data for labelling the ellipse
+NMDS.mean.dune=aggregate(dune.nmds.data[ ,c("NMDS1", "NMDS2")], 
+                         list(group = dune.nmds.data$Management), mean)
+ 
+# data for labelling the ellipse
+NMDS.mean=aggregate(dune.nmds.data[,c("NMDS1", "NMDS2")], 
+                    list(group = dune.nmds.data$Management), mean)
+
+```
+
+```{r plot ellipses}
+dune.nmds.gg1+ 
+geom_path(data = df_ell.dune.management, aes(x = NMDS1, y = NMDS2, group = Management)) #this is the ellipse, seperate ones by Site. 
+```
+
+# Extras
+
+For some extra tips and tricks with ggplot have a look at this cheat sheet from RStudio <https://rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf> 
+
+As with anything in R there are many ways to create ggplot ordinations.
+Here is another example using the `ggord` package from Marcus Beck which seems pretty stright forward as well and maybe doesn't require as much fidling with data as this example <https://www.r-bloggers.com/reinventing-the-wheel-for-ordination-biplots-with-ggplot2/>
+
+#Session Info
+```{r session, echo = FALSE, eval = TRUE}
+utils::sessionInfo()
+```
